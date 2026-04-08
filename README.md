@@ -19,6 +19,8 @@
 
 采用GitHub Actions自动编译发布，下载地址：[https://nightly.link/zzp198/Google-Chrome-Portable/workflows/build/main](https://nightly.link/zzp198/Google-Chrome-Portable/workflows/build/main)
 
+GitHub Actions 每次会生成两个独立 artifact，分别对应 `Chrome` 和 `Chromium`。
+
 [![build status](https://github.com/zzp198/Google-Chrome-Portable/actions/workflows/build.yml/badge.svg)](https://github.com/zzp198/Google-Chrome-Portable/actions/workflows/build.yml)
 
 # 安装

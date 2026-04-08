@@ -23,9 +23,15 @@ jobs:
           python3 -m pip install -r requirements.txt
           python3 -m unittest tests.test_portable_build -v
           python3 run.py
-      - name: upload
+      - name: upload chrome
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.BUILD_NAME }}
-          path: build/release/*
+          name: Chrome_${{ env.BUILD_NAME }}
+          path: build/release/Chrome
+          retention-days: 15
+      - name: upload chromium
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chromium_${{ env.BUILD_NAME }}
+          path: build/release/Chromium
           retention-days: 15
