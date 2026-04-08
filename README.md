@@ -17,9 +17,16 @@
 
 全自动无人管理项目，每周定时拉取最新 Chrome 离线包和 Chromium snapshots，并同时封装为便携版。
 
-采用GitHub Actions自动编译发布，下载地址：[https://nightly.link/zzp198/Google-Chrome-Portable/workflows/build/main](https://nightly.link/zzp198/Google-Chrome-Portable/workflows/build/main)
+项目当前**不使用 GitHub Release**。这里的“发布”实际是指 GitHub Actions 自动构建并上传构建产物（artifact）。
 
-GitHub Actions 每次会生成两个独立 artifact，分别对应 `Chrome` 和 `Chromium`。
+下载入口：[https://nightly.link/zzp198/Google-Chrome-Portable/workflows/build/main](https://nightly.link/zzp198/Google-Chrome-Portable/workflows/build/main)
+
+说明：
+
+- GitHub Actions 每次会生成两个独立 artifact，分别对应 `Chrome_${BUILD_NAME}` 和 `Chromium_${BUILD_NAME}`
+- 也可以直接到 GitHub 仓库的 `Actions` 页面进入对应 workflow 运行记录后下载 artifact
+- `nightly.link` 只是对 workflow artifact 的下载代理，并不是单独维护的发布站点
+- 当前 artifact 在 GitHub Actions 中默认保留 15 天
 
 [![build status](https://github.com/zzp198/Google-Chrome-Portable/actions/workflows/build.yml/badge.svg)](https://github.com/zzp198/Google-Chrome-Portable/actions/workflows/build.yml)
 
