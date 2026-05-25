@@ -12,9 +12,9 @@
 已完成代码、测试、工作流与文档改造，但尚未提交。
 
 当前未提交改动包括：
-- `portable_build.py`: 恢复双目标构建；新增 Chromium LAST_CHANGE 元数据获取、`chrome-win.zip` 下载模板、`chrome-win` 源目录解析；Chrome 与 Chromium 均输出到 `build/release/<Name>/App`，并复制 Chrome++ 文件。
-- `tests/test_portable_build.py`: 更新为 16 个测试，覆盖 Chrome/Chromium 双目标、Chromium metadata、Chromium revision 数字校验、`chrome-win` 目录解析、Chromium 扁平解压目录 fallback、双目标主流程、Chrome++ 配置覆盖。
-- `.github/workflows/build.yml`: job 名称为 `Warp_Browsers`，artifact 上传 `build/release/*`。
+- `portable_build.py`: 恢复双目标构建；新增 Chromium LAST_CHANGE 元数据获取、`chrome-win.zip` 下载模板、`chrome-win` 源目录解析；Chrome 与 Chromium 均输出到 `build/release/<Name>/App`，并写出 `CHROME_ARTIFACT_NAME` / `CHROMIUM_ARTIFACT_NAME`。
+- `tests/test_portable_build.py`: 更新为 16 个测试，覆盖 Chrome/Chromium 双目标、Chromium metadata、Chromium revision 数字校验、`chrome-win` 目录解析、Chromium 扁平解压目录 fallback、双目标主流程、Chrome++ 配置覆盖、两个独立 artifact 名称。
+- `.github/workflows/build.yml`: job 名称为 `Warp_Browsers`，分别上传 `build/release/Chrome` 和 `build/release/Chromium`，artifact 名称为 `Chrome_<version>_win64` 与 `Chromium_<revision>_win64`。
 - `README.md`: 恢复 Chrome + Chromium 双产物说明。
 - `docs/plans/2026-04-08-readme-release-clarification.md`: 修正旧计划中的单 Chrome 过时表述，避免与当前双构建状态冲突。
 - `chrome++.ini`: 非注释 `command_line` 已更新为 `--silent-debugger-extension-api --test-type --ignore-certificate-errors --no-first-run --no-default-browser-check`。

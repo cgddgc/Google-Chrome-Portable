@@ -122,6 +122,13 @@ def build_release_name(chrome_version: str, chromium_revision: str, build_date: 
     )
 
 
+def build_artifact_names(chrome_version: str, chromium_revision: str) -> dict[str, str]:
+    return {
+        "chrome": f"Chrome_{chrome_version}_win64",
+        "chromium": f"Chromium_{chromium_revision}_win64",
+    }
+
+
 def finalize_portable_directory(
     source_dir: Union[str, Path],
     release_root: Union[str, Path],
@@ -335,8 +342,11 @@ def write_build_name(build_date: date, chrome_version: str, chromium_revision: s
         return
 
     build_name = build_release_name(chrome_version, chromium_revision, build_date)
+    artifact_names = build_artifact_names(chrome_version, chromium_revision)
     with open(env_path, "a", encoding="utf-8") as file:
         file.write(f"BUILD_NAME={build_name}\n")
+        file.write(f"CHROME_ARTIFACT_NAME={artifact_names['chrome']}\n")
+        file.write(f"CHROMIUM_ARTIFACT_NAME={artifact_names['chromium']}\n")
 
 
 def main(base_dir: Optional[Union[str, Path]] = None, now: Optional[Callable[[], date]] = None) -> None:

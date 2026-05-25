@@ -87,7 +87,7 @@ command_line=--silent-debugger-extension-api --test-type --ignore-certificate-er
 
 结果：无输出。
 
-已执行双目标主流程模拟测试：
+已执行双目标主流程模拟测试，确认写出两个独立 artifact 名称：
 
 ```bash
 python -m unittest tests.test_portable_build.MainFlowTests.test_main_extracts_chrome_and_chromium_and_writes_build_name -v
@@ -96,9 +96,11 @@ python -m unittest tests.test_portable_build.MainFlowTests.test_main_extracts_ch
 结果：
 
 ```text
-Ran 1 test in 0.018s
+Ran 1 test in 0.020s
 OK
 ```
+
+测试覆盖 `CHROME_ARTIFACT_NAME=Chrome_<version>_win64` 与 `CHROMIUM_ARTIFACT_NAME=Chromium_<revision>_win64`。
 
 ## 仍有效的历史验证
 

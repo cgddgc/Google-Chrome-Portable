@@ -407,7 +407,11 @@ class MainFlowTests(unittest.TestCase):
             self.assertIn(f"command_line={EXPECTED_COMMAND_LINE}", chromium_config)
             self.assertNotIn("--disable-infobars", chromium_config)
             self.assertIn(
-                "BUILD_NAME=Win64_chrome_135.0.7049.42_chromium_1611271_2026-05-23",
+                "CHROME_ARTIFACT_NAME=Chrome_135.0.7049.42_win64",
+                env_file.read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "CHROMIUM_ARTIFACT_NAME=Chromium_1611271_win64",
                 env_file.read_text(encoding="utf-8"),
             )
 
