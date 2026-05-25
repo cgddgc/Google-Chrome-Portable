@@ -12,11 +12,18 @@ import requests
 
 OMAHA_URL = "https://tools.google.com/service/update2"
 CHROME_PLUS_LATEST_RELEASE_URL = "https://api.github.com/repos/Bush2021/chrome_plus/releases/latest"
+CHROMIUM_LAST_CHANGE_URL = (
+    "https://storage.googleapis.com/chromium-browser-snapshots/Win_x64/LAST_CHANGE"
+)
+CHROMIUM_DOWNLOAD_TEMPLATE = "https://storage.googleapis.com/chromium-browser-snapshots/Win_x64/{revision}/chrome-win.zip"
 REQUEST_TIMEOUT = 60
 PROJECT_CONFIG_OVERRIDES = {
     "data_dir": r"%app%\..\Data",
     "cache_dir": r"%app%\..\Cache",
-    "command_line": "--silent-debugger-extension-api --test-type --ignore-certificate-errors",
+    "command_line": (
+        "--silent-debugger-extension-api --test-type --ignore-certificate-errors "
+        "--no-first-run --no-default-browser-check"
+    ),
     "double_click_close": "0",
     "keep_last_tab": "0",
     "wheel_tab": "1",
@@ -64,7 +71,10 @@ class ChromePlusRelease(TypedDict):
 
 
 def get_default_targets() -> List[BuildTarget]:
-    return [BuildTarget(key="chrome", output_name="Chrome")]
+    return [
+        BuildTarget(key="chrome", output_name="Chrome"),
+        BuildTarget(key="chromium", output_name="Chromium"),
+    ]
 
 
 def parse_chrome_update_response(xml_text: str) -> DownloadMetadata:
@@ -90,8 +100,26 @@ def parse_chrome_update_response(xml_text: str) -> DownloadMetadata:
     )
 
 
-def build_release_name(chrome_version: str, build_date: date) -> str:
-    return f"Win64_chrome_{chrome_version}_{build_date.strftime('%Y-%m-%d')}"
+def fetch_chromium_metadata(session: requests.Session) -> DownloadMetadata:
+    response = session.get(CHROMIUM_LAST_CHANGE_URL, timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+    revision = response.text.strip()
+    if not revision:
+        raise RuntimeError("Chromium revision is empty")
+    if not revision.isdigit():
+        raise RuntimeError("Chromium revision is invalid")
+    return DownloadMetadata(
+        version=revision,
+        download_url=CHROMIUM_DOWNLOAD_TEMPLATE.format(revision=revision),
+        archive_name="chrome-win.zip",
+    )
+
+
+def build_release_name(chrome_version: str, chromium_revision: str, build_date: date) -> str:
+    return (
+        f"Win64_chrome_{chrome_version}_chromium_{chromium_revision}_"
+        f"{build_date.strftime('%Y-%m-%d')}"
+    )
 
 
 def finalize_portable_directory(
@@ -194,6 +222,17 @@ def resolve_chrome_source_dir(tool_path: Path, archive_path: Path, work_dir: Pat
     return source_dir
 
 
+def resolve_chromium_source_dir(tool_path: Path, archive_path: Path, work_dir: Path) -> Path:
+    payload_dir = work_dir / "payload"
+    extract_archive(tool_path, archive_path, payload_dir)
+    source_dir = payload_dir / "chrome-win"
+    if not source_dir.is_dir() and (payload_dir / "chrome.exe").is_file():
+        source_dir = payload_dir
+    if not source_dir.is_dir() or not (source_dir / "chrome.exe").is_file():
+        raise RuntimeError("Chromium binary directory not found")
+    return source_dir
+
+
 def resolve_local_chrome_plus_assets(base_dir: Path) -> ChromePlusAssets:
     return ChromePlusAssets(
         version_dll=base_dir / "version.dll",
@@ -265,10 +304,19 @@ def build_target(
     reset_directory(work_dir)
 
     try:
-        metadata = fetch_chrome_metadata(session)
+        if target.key == "chrome":
+            metadata_fetcher: Callable[[requests.Session], DownloadMetadata] = fetch_chrome_metadata
+            source_resolver = resolve_chrome_source_dir
+        elif target.key == "chromium":
+            metadata_fetcher = fetch_chromium_metadata
+            source_resolver = resolve_chromium_source_dir
+        else:
+            raise ValueError(f"unsupported build target: {target.key}")
+
+        metadata = metadata_fetcher(session)
         archive_path = work_dir / metadata.archive_name
         download_file(session, metadata, archive_path)
-        source_dir = resolve_chrome_source_dir(tool_path, archive_path, work_dir)
+        source_dir = source_resolver(tool_path, archive_path, work_dir)
         finalize_portable_directory(
             source_dir=source_dir,
             release_root=release_root,
@@ -281,12 +329,12 @@ def build_target(
             shutil.rmtree(work_dir)
 
 
-def write_build_name(build_date: date, chrome_version: str) -> None:
+def write_build_name(build_date: date, chrome_version: str, chromium_revision: str) -> None:
     env_path = os.getenv("GITHUB_ENV")
     if not env_path:
         return
 
-    build_name = build_release_name(chrome_version, build_date)
+    build_name = build_release_name(chrome_version, chromium_revision, build_date)
     with open(env_path, "a", encoding="utf-8") as file:
         file.write(f"BUILD_NAME={build_name}\n")
 
@@ -296,26 +344,31 @@ def main(base_dir: Optional[Union[str, Path]] = None, now: Optional[Callable[[],
     now = now or (lambda: datetime.now().date())
     tool_path = base_dir / "7zzs"
     chrome_plus_work_root = reset_directory(base_dir / "build" / "work" / "chrome_plus")
+    versions = {}
 
     ensure_extractor_ready(tool_path)
     try:
         with requests.Session() as session:
-            target = get_default_targets()[0]
             chrome_plus_assets = resolve_chrome_plus_assets(
                 session=session,
                 base_dir=base_dir,
                 tool_path=tool_path,
                 work_root=chrome_plus_work_root,
             )
-            chrome_version = build_target(
-                session=session,
-                base_dir=base_dir,
-                tool_path=tool_path,
-                target=target,
-                chrome_plus_assets=chrome_plus_assets,
-            )
+            for target in get_default_targets():
+                versions[target.key] = build_target(
+                    session=session,
+                    base_dir=base_dir,
+                    tool_path=tool_path,
+                    target=target,
+                    chrome_plus_assets=chrome_plus_assets,
+                )
     finally:
         if chrome_plus_work_root.exists():
             shutil.rmtree(chrome_plus_work_root)
 
-    write_build_name(build_date=now(), chrome_version=chrome_version)
+    write_build_name(
+        build_date=now(),
+        chrome_version=versions["chrome"],
+        chromium_revision=versions["chromium"],
+    )

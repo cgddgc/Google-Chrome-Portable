@@ -4,7 +4,7 @@
 
 **Goal:** 让 README 清楚说明当前项目的“发布”其实是 GitHub Actions artifact，而不是 GitHub Release。
 
-**Architecture:** 修改 `README.md` 的“获取”部分，补充 artifact 下载方式、nightly.link 作用与保留时间，并保持说明与当前 Chrome-only 构建逻辑一致。
+**Architecture:** 修改 `README.md` 的“获取”部分，补充 artifact 下载方式、nightly.link 作用与保留时间，并保持说明与当前 Chrome + Chromium 双构建逻辑一致。
 
 **Tech Stack:** Markdown、GitHub Actions
 

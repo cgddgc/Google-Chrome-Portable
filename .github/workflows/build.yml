@@ -10,7 +10,7 @@ on:
     - cron: "0 8 * * 1"
 
 jobs:
-  Warp_Chrome:
+  Warp_Browsers:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,5 +27,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.BUILD_NAME }}
-          path: build/release/Chrome
+          path: build/release/*
           retention-days: 15
