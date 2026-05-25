@@ -32,7 +32,7 @@
 - GitHub Actions 可以构建时自动拉取 `Bush2021/chrome_plus` latest release 的 Chrome++ 主包。
 - 本地构建默认使用仓库内的 `version.dll` 与 `chrome++.ini`，避免本地每次依赖网络。
 - CI 构建使用 `CHROME_PLUS_SOURCE=latest python3 run.py`，从 latest release 抽取 `x64/App/version.dll` 和 `x64/App/chrome++.ini`。
-- CI 分别上传两个 artifact：`Chrome_<chrome_version>_win64` 对应 `build/release/Chrome`，`Chromium_<revision>_win64` 对应 `build/release/Chromium`。
+- CI 分别上传两个 artifact：`Chrome_<chrome_version>_win64` 对应 `build/release/Chrome`，`Chromium_<chromium_product_version>_<revision>_win64` 对应 `build/release/Chromium`。Chromium 的 revision 来自 `Win_x64/LAST_CHANGE`，产品版本来自解包后的 `Chromium/App/chrome.exe` Windows version resource。
 - 构建时会对 Chrome++ 配置应用项目固定覆盖项，避免 upstream 默认值改变项目行为。
 - Chrome 官方离线包解析为 `Chrome-bin`；Chromium Win64 snapshot 解析为 `chrome-win`。
 - Chrome++ 的 `version.dll` 与 `chrome++.ini` 必须和最终 `chrome.exe` 位于同一目录，即 `Chrome/App` 或 `Chromium/App`。

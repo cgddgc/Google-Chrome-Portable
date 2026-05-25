@@ -3,6 +3,7 @@ from datetime import date, datetime
 import os
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 from typing import Callable, List, Optional, TypedDict, Union, cast
 import xml.dom.minidom
@@ -51,6 +52,12 @@ class DownloadMetadata:
     version: str
     download_url: str
     archive_name: str
+
+
+@dataclass(frozen=True)
+class BuildResult:
+    version: str
+    product_version: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -122,11 +129,61 @@ def build_release_name(chrome_version: str, chromium_revision: str, build_date: 
     )
 
 
-def build_artifact_names(chrome_version: str, chromium_revision: str) -> dict[str, str]:
+def build_artifact_names(
+    chrome_version: str,
+    chromium_product_version: str,
+    chromium_revision: str,
+) -> dict[str, str]:
     return {
         "chrome": f"Chrome_{chrome_version}_win64",
-        "chromium": f"Chromium_{chromium_revision}_win64",
+        "chromium": f"Chromium_{chromium_product_version}_{chromium_revision}_win64",
     }
+
+
+def align_to_4(value: int) -> int:
+    return (value + 3) & ~3
+
+
+def read_windows_product_version(executable_path: Union[str, Path]) -> str:
+    data = Path(executable_path).read_bytes()
+    key = "VS_VERSION_INFO".encode("utf-16le") + b"\x00\x00"
+    fixed_info_size = 13 * 4
+    search_offset = 0
+
+    while True:
+        key_offset = data.find(key, search_offset)
+        if key_offset == -1:
+            raise RuntimeError("Windows version resource not found")
+
+        header_offset = key_offset - 6
+        if header_offset >= 0:
+            block_length, value_length, value_type = struct.unpack_from(
+                "<HHH", data, header_offset
+            )
+            value_offset = header_offset + align_to_4(
+                key_offset + len(key) - header_offset
+            )
+            value_end = value_offset + fixed_info_size
+            if (
+                block_length >= value_end - header_offset
+                and value_length >= fixed_info_size
+                and value_type == 0
+                and value_end <= len(data)
+            ):
+                fixed_info = struct.unpack_from("<13I", data, value_offset)
+                if fixed_info[0] == 0xFEEF04BD:
+                    product_ms = fixed_info[4]
+                    product_ls = fixed_info[5]
+                    version_parts = (
+                        product_ms >> 16,
+                        product_ms & 0xFFFF,
+                        product_ls >> 16,
+                        product_ls & 0xFFFF,
+                    )
+                    if any(version_parts):
+                        return ".".join(str(part) for part in version_parts)
+
+        search_offset = key_offset + len(key)
 
 
 def finalize_portable_directory(
@@ -305,7 +362,7 @@ def build_target(
     tool_path: Path,
     target: BuildTarget,
     chrome_plus_assets: ChromePlusAssets,
-) -> str:
+) -> BuildResult:
     release_root = base_dir / "build" / "release"
     work_dir = base_dir / "build" / "work" / target.key
     reset_directory(work_dir)
@@ -324,25 +381,39 @@ def build_target(
         archive_path = work_dir / metadata.archive_name
         download_file(session, metadata, archive_path)
         source_dir = source_resolver(tool_path, archive_path, work_dir)
-        finalize_portable_directory(
+        output_dir = finalize_portable_directory(
             source_dir=source_dir,
             release_root=release_root,
             output_name=target.output_name,
             chrome_plus_assets=chrome_plus_assets,
         )
-        return metadata.version
+        if target.key == "chromium":
+            return BuildResult(
+                version=metadata.version,
+                product_version=read_windows_product_version(output_dir / "App" / "chrome.exe"),
+            )
+        return BuildResult(version=metadata.version)
     finally:
         if work_dir.exists():
             shutil.rmtree(work_dir)
 
 
-def write_build_name(build_date: date, chrome_version: str, chromium_revision: str) -> None:
+def write_build_name(
+    build_date: date,
+    chrome_version: str,
+    chromium_product_version: str,
+    chromium_revision: str,
+) -> None:
     env_path = os.getenv("GITHUB_ENV")
     if not env_path:
         return
 
     build_name = build_release_name(chrome_version, chromium_revision, build_date)
-    artifact_names = build_artifact_names(chrome_version, chromium_revision)
+    artifact_names = build_artifact_names(
+        chrome_version,
+        chromium_product_version,
+        chromium_revision,
+    )
     with open(env_path, "a", encoding="utf-8") as file:
         file.write(f"BUILD_NAME={build_name}\n")
         file.write(f"CHROME_ARTIFACT_NAME={artifact_names['chrome']}\n")
@@ -354,7 +425,7 @@ def main(base_dir: Optional[Union[str, Path]] = None, now: Optional[Callable[[],
     now = now or (lambda: datetime.now().date())
     tool_path = base_dir / "7zzs"
     chrome_plus_work_root = reset_directory(base_dir / "build" / "work" / "chrome_plus")
-    versions = {}
+    versions: dict[str, BuildResult] = {}
 
     ensure_extractor_ready(tool_path)
     try:
@@ -377,8 +448,13 @@ def main(base_dir: Optional[Union[str, Path]] = None, now: Optional[Callable[[],
         if chrome_plus_work_root.exists():
             shutil.rmtree(chrome_plus_work_root)
 
+    chromium_product_version = versions["chromium"].product_version
+    if not chromium_product_version:
+        raise RuntimeError("Chromium product version is missing")
+
     write_build_name(
         build_date=now(),
-        chrome_version=versions["chrome"],
-        chromium_revision=versions["chromium"],
+        chrome_version=versions["chrome"].version,
+        chromium_product_version=chromium_product_version,
+        chromium_revision=versions["chromium"].version,
     )

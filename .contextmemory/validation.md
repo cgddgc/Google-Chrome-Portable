@@ -1,6 +1,6 @@
 # 验证结论
 
-## 2026-05-25 Chrome + Chromium / Chrome++ command_line 改造验证
+## 2026-05-25 Chrome + Chromium / Chrome++ command_line 与 Chromium artifact 版本号验证
 
 本轮先按 TDD 写入回归测试并确认红灯：
 
@@ -10,7 +10,39 @@ python -m unittest tests.test_portable_build -v
 
 初始结果包含预期失败：缺少 `fetch_chromium_metadata`、`resolve_chromium_source_dir`，默认目标仍只有 Chrome，`build_release_name` 尚不接受 `chromium_revision`，`command_line` 尚未包含新增默认参数。
 
+后续针对 Chromium artifact 版本号补充红灯测试：
+
+```bash
+python -m unittest tests.test_portable_build.BuildNameTests -v
+```
+
+预期失败：`build_artifact_names()` 尚不接受 `chromium_product_version`。
+
+```bash
+python -m unittest tests.test_portable_build.WindowsVersionResourceTests tests.test_portable_build.MainFlowTests.test_main_extracts_chrome_and_chromium_and_writes_build_name -v
+```
+
+预期失败：尚未实现 `read_windows_product_version()`，主流程尚未把 Chromium 产品版本传入 artifact 名。
+
 实现后已执行并通过：
+
+```bash
+python -m unittest tests.test_portable_build.WindowsVersionResourceTests tests.test_portable_build.BuildNameTests tests.test_portable_build.MainFlowTests.test_main_extracts_chrome_and_chromium_and_writes_build_name -v
+```
+
+结果：
+
+```text
+Ran 5 tests in 0.022s
+OK
+```
+
+这覆盖了：
+- 从 Windows `VS_VERSION_INFO` / `VS_FIXEDFILEINFO` 中读取 `ProductVersion`。
+- 缺少版本资源时报错。
+- Chromium artifact 名称写为 `Chromium_<product_version>_<revision>_win64`。
+
+已执行并通过：
 
 ```bash
 python -m unittest tests.test_portable_build.SourceDirectoryTests -v
@@ -40,6 +72,20 @@ OK
 
 这覆盖了 Chromium `LAST_CHANGE` 正常 revision、空 revision 与非数字 revision。
 
+已执行并通过 LSP：
+
+```text
+portable_build.py: No diagnostics found
+tests/test_portable_build.py: No diagnostics found
+README.md: No diagnostics found
+```
+
+已确认本地 `chrome++.ini` 非注释 `command_line`：
+
+```text
+command_line=--silent-debugger-extension-api --test-type --ignore-certificate-errors --no-first-run --no-default-browser-check
+```
+
 已执行并通过：
 
 ```bash
@@ -49,7 +95,7 @@ python -m unittest tests.test_portable_build -v
 结果：
 
 ```text
-Ran 16 tests in 0.047s
+Ran 19 tests in 0.055s
 OK
 ```
 
@@ -67,40 +113,7 @@ python -m py_compile portable_build.py run.py
 git diff --check
 ```
 
-结果：无格式错误；仅有 Windows 本地 `LF will be replaced by CRLF` 提示。
-
-已执行并通过 LSP：
-
-```text
-portable_build.py: No diagnostics found
-tests/test_portable_build.py: No diagnostics found
-README.md: No diagnostics found
-```
-
-已确认本地 `chrome++.ini` 非注释 `command_line`：
-
-```text
-command_line=--silent-debugger-extension-api --test-type --ignore-certificate-errors --no-first-run --no-default-browser-check
-```
-
-已搜索旧的单 Chrome 构建表述并通过，当前仓库代码/文档未再保留与双构建相冲突的旧说法。
-
-结果：无输出。
-
-已执行双目标主流程模拟测试，确认写出两个独立 artifact 名称：
-
-```bash
-python -m unittest tests.test_portable_build.MainFlowTests.test_main_extracts_chrome_and_chromium_and_writes_build_name -v
-```
-
-结果：
-
-```text
-Ran 1 test in 0.020s
-OK
-```
-
-测试覆盖 `CHROME_ARTIFACT_NAME=Chrome_<version>_win64` 与 `CHROMIUM_ARTIFACT_NAME=Chromium_<revision>_win64`。
+结果：无空白错误；仅有 Windows 本地 `LF will be replaced by CRLF` 提示。
 
 ## 仍有效的历史验证
 

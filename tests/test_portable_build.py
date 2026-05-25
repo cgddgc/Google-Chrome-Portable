@@ -1,6 +1,7 @@
 from datetime import date
 import os
 from pathlib import Path
+import struct
 from tempfile import TemporaryDirectory
 import unittest
 from unittest import mock
@@ -32,6 +33,37 @@ def write_config(path: Path) -> None:
         + "\r\n",
         encoding="utf-16",
     )
+
+
+def pack_fixed_version(version: str) -> tuple[int, int]:
+    major, minor, build, patch = (int(part) for part in version.split("."))
+    return (major << 16) | minor, (build << 16) | patch
+
+
+def make_version_info_bytes(product_version: str) -> bytes:
+    key = "VS_VERSION_INFO".encode("utf-16le") + b"\x00\x00"
+    header = struct.pack("<HHH", 0, 52, 0) + key
+    padding = b"\x00" * ((4 - (len(header) % 4)) % 4)
+    file_ms, file_ls = pack_fixed_version("1.2.3.4")
+    product_ms, product_ls = pack_fixed_version(product_version)
+    fixed_info = struct.pack(
+        "<13I",
+        0xFEEF04BD,
+        0x00010000,
+        file_ms,
+        file_ls,
+        product_ms,
+        product_ls,
+        0x0000003F,
+        0,
+        0x00040004,
+        0x00000001,
+        0,
+        0,
+        0,
+    )
+    body = header + padding + fixed_info
+    return struct.pack("<H", len(body)) + body[2:]
 
 
 class BuildTargetTests(unittest.TestCase):
@@ -107,6 +139,27 @@ class ChromiumMetadataTests(unittest.TestCase):
             portable_build.fetch_chromium_metadata(session)
 
 
+class WindowsVersionResourceTests(unittest.TestCase):
+    def test_read_windows_product_version_from_version_resource(self):
+        with TemporaryDirectory() as temp_dir:
+            executable = Path(temp_dir) / "chrome.exe"
+            executable.write_bytes(
+                b"prefix" + make_version_info_bytes("136.0.7103.114") + b"suffix"
+            )
+
+            version = portable_build.read_windows_product_version(executable)
+
+        self.assertEqual(version, "136.0.7103.114")
+
+    def test_read_windows_product_version_requires_version_resource(self):
+        with TemporaryDirectory() as temp_dir:
+            executable = Path(temp_dir) / "chrome.exe"
+            executable.write_bytes(b"not a pe version resource")
+
+            with self.assertRaisesRegex(RuntimeError, "version resource"):
+                portable_build.read_windows_product_version(executable)
+
+
 class BuildNameTests(unittest.TestCase):
     def test_build_release_name_contains_chrome_version_and_chromium_revision(self):
         name = portable_build.build_release_name(
@@ -118,6 +171,19 @@ class BuildNameTests(unittest.TestCase):
         self.assertEqual(
             name,
             "Win64_chrome_135.0.7049.42_chromium_1611271_2026-05-23",
+        )
+
+    def test_build_artifact_names_contains_chromium_product_version_and_revision(self):
+        names = portable_build.build_artifact_names(
+            chrome_version="135.0.7049.42",
+            chromium_product_version="136.0.7103.114",
+            chromium_revision="1611271",
+        )
+
+        self.assertEqual(names["chrome"], "Chrome_135.0.7049.42_win64")
+        self.assertEqual(
+            names["chromium"],
+            "Chromium_136.0.7103.114_1611271_win64",
         )
 
 
@@ -383,6 +449,11 @@ class MainFlowTests(unittest.TestCase):
                     portable_build, "extract_archive", side_effect=fake_extract
                 ),
                 mock.patch.object(portable_build, "ensure_extractor_ready"),
+                mock.patch.object(
+                    portable_build,
+                    "read_windows_product_version",
+                    return_value="136.0.7103.114",
+                ),
                 mock.patch.dict(os.environ, {"GITHUB_ENV": str(env_file)}, clear=False),
             ):
                 portable_build.main(base_dir=temp_path, now=lambda: date(2026, 5, 23))
@@ -411,7 +482,7 @@ class MainFlowTests(unittest.TestCase):
                 env_file.read_text(encoding="utf-8"),
             )
             self.assertIn(
-                "CHROMIUM_ARTIFACT_NAME=Chromium_1611271_win64",
+                "CHROMIUM_ARTIFACT_NAME=Chromium_136.0.7103.114_1611271_win64",
                 env_file.read_text(encoding="utf-8"),
             )
 
